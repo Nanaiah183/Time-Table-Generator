@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Time Table Generator</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            min-height: 100vh;
+            padding: 30px 15px;
+        }
+
+        h1 {
+            text-align: center;
+            color: white;
+            margin-bottom: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: auto;
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.2);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .full {
+            grid-column: span 2;
+        }
+
+        label {
+            font-size: 14px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            margin-top: 5px;
+        }
+
+        textarea {
+            resize: none;
+            height: 60px;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        button {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        button:hover {
+            transform: scale(1.03);
+        }
+
+        .table-container {
+            margin-top: 30px;
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 700px;
+        }
+
+        th {
+            background: #667eea;
+            color: white;
+            padding: 10px;
+            font-size: 13px;
+        }
+
+        td {
+            padding: 10px;
+            text-align: center;
+        }
+
+        .break {
+            background: #ffeaa7 !important;
+            font-weight: bold;
+        }
+
+        .day {
+            font-weight: bold;
+            background: #f1f2f6;
+        }
+
+        @media print {
+            body { background: white; }
+            button { display: none; }
+        }
+
+    </style>
+</head>
+<body>
+
+<h1>📚 Time Table Generator</h1>
+
+<div class="container">
+
+    <div class="grid">
+
+        <div class="full">
+            <label>Subjects (comma separated)</label>
+            <textarea id="subjects" placeholder="Math, English, Science"></textarea>
+        </div>
+
+        <div>
+            <label>Number of Days</label>
+            <input type="number" id="days" value="5" min="1" max="7">
+        </div>
+
+        <div>
+            <label>Periods Per Day</label>
+            <input type="number" id="periods" value="6">
+        </div>
+
+        <div>
+            <label>Start Time</label>
+            <input type="time" id="startTime" value="09:00">
+        </div>
+
+        <div>
+            <label>Period Duration (minutes)</label>
+            <input type="number" id="duration" value="60">
+        </div>
+
+        <div>
+            <label>Break After Period</label>
+            <input type="number" id="breakAfter" placeholder="Example: 3">
+        </div>
+
+        <div>
+            <label>Break Duration (minutes)</label>
+            <input type="number" id="breakDuration" value="30">
+        </div>
+
+    </div>
+
+    <div class="btn-group">
+        <button onclick="generateTimetable()">Generate</button>
+        <button onclick="window.print()">Print</button>
+        <button onclick="resetForm()">Reset</button>
+    </div>
+
+    <div class="table-container">
+        <div id="timetable"></div>
+    </div>
+
+</div>
+
+<script>
+
+function shuffle(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+    }
+}
+
+function addMinutes(time, minsToAdd) {
+    let [hours, minutes] = time.split(":").map(Number);
+    let date = new Date();
+    date.setHours(hours);
+    date.setMinutes(minutes + minsToAdd);
+    return date.toTimeString().slice(0,5);
+}
+
+function formatTime(time) {
+    let [hour, minute] = time.split(":");
+    hour = parseInt(hour);
+    let ampm = hour >= 12 ? "PM" : "AM";
+    hour = hour % 12 || 12;
+    return hour + ":" + minute + " " + ampm;
+}
+
+function generateTimetable() {
+
+    const subjectsInput = document.getElementById("subjects").value;
+    const days = parseInt(document.getElementById("days").value);
+    const periods = parseInt(document.getElementById("periods").value);
+    const startTime = document.getElementById("startTime").value;
+    const duration = parseInt(document.getElementById("duration").value);
+    const breakAfter = parseInt(document.getElementById("breakAfter").value);
+    const breakDuration = parseInt(document.getElementById("breakDuration").value);
+
+    if (!subjectsInput) {
+        alert("Please enter subjects!");
+        return;
+    }
+
+    let subjects = subjectsInput.split(",")
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+
+    // 🎨 Generate consistent color for each subject
+    let subjectColors = {};
+    subjects.forEach(sub => {
+        subjectColors[sub] = "hsl(" + Math.floor(Math.random() * 360) + ", 70%, 85%)";
+    });
+
+    const dayNames = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+
+    let tableHTML = "<table><tr><th>Day</th>";
+
+    let currentTime = startTime;
+    let timeSlots = [];
+
+    for (let i = 1; i <= periods; i++) {
+
+        let endTime = addMinutes(currentTime, duration);
+        let periodTime = formatTime(currentTime) + " - " + formatTime(endTime);
+        timeSlots.push({ type: "period", label: periodTime });
+
+        currentTime = endTime;
+
+        if (breakAfter && i === breakAfter) {
+            let breakEnd = addMinutes(currentTime, breakDuration);
+            let breakTime = "Break (" + formatTime(currentTime) + " - " + formatTime(breakEnd) + ")";
+            timeSlots.push({ type: "break", label: breakTime });
+            currentTime = breakEnd;
+        }
+    }
+
+    timeSlots.forEach(slot => {
+        tableHTML += "<th>" + slot.label + "</th>";
+    });
+
+    tableHTML += "</tr>";
+
+    for (let d = 0; d < days; d++) {
+
+        tableHTML += "<tr>";
+        tableHTML += "<td class='day'>" + dayNames[d % 7] + "</td>";
+
+        let lastSubject = "";
+
+        timeSlots.forEach(slot => {
+
+            if (slot.type === "break") {
+                tableHTML += "<td class='break'>" + slot.label + "</td>";
+            } else {
+                let available = subjects.filter(s => s !== lastSubject);
+                shuffle(available);
+                let chosen = available[0];
+
+                tableHTML += "<td style='background:" + subjectColors[chosen] + "'>" + chosen + "</td>";
+                lastSubject = chosen;
+            }
+
+        });
+
+        tableHTML += "</tr>";
+    }
+
+    tableHTML += "</table>";
+    document.getElementById("timetable").innerHTML = tableHTML;
+}
+
+function resetForm() {
+    document.getElementById("subjects").value = "";
+    document.getElementById("days").value = 5;
+    document.getElementById("periods").value = 6;
+    document.getElementById("startTime").value = "09:00";
+    document.getElementById("duration").value = 60;
+    document.getElementById("breakAfter").value = "";
+    document.getElementById("breakDuration").value = 30;
+    document.getElementById("timetable").innerHTML = "";
+}
+
+</script>
+
+</body>
+</html>
